@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LUNA FX — Connection Diagnostic</title>
+<style>
+:root{color-scheme:dark;--bg:#081321;--panel:#122137;--line:#2b405b;--muted:#9aacc2;--green:#39d6a0;--red:#ff7185;--amber:#ffc66d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#edf4ff;font:15px system-ui,Arial}
+main{max-width:760px;margin:auto;padding:20px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:16px;margin:14px 0}
+h1{font-size:23px;margin:0}.muted,.hint{color:var(--muted);font-size:13px;line-height:1.5}
+input,button{width:100%;padding:13px;border-radius:9px;border:1px solid #3a5270;background:#0a1728;color:#fff;font:inherit}
+button{background:#174d78;border-color:#286b9e;font-weight:700;margin-top:10px}button.secondary{background:#20334c}
+.status{display:inline-block;padding:7px 12px;border-radius:30px;background:#293a50;font-size:12px;color:var(--amber)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#0a1728;padding:12px;border-radius:10px;border:1px solid var(--line)}
+.metric small{display:block;color:var(--muted)}.metric strong{display:block;margin-top:5px;font-size:17px;overflow-wrap:anywhere}
+.good{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--amber)}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:270px;overflow:auto;font:12px ui-monospace,monospace;color:#bfd0e4}
+@media(min-width:600px){.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.actions button{margin-top:10px}}
+</style>
+</head>
+<body><main>
+<h1>🐺 LUNA FX — Connection Diagnostic</h1>
+<p class="muted">Standalone WebSocket test · EUR/USD market data is not requested · No login, password, API token or trading access.</p>
+<section class="panel">
+<div><span id="status" class="status">Not tested</span></div>
+<p class="hint">App ID</p><input id="appid" value="1089" inputmode="numeric" aria-label="Deriv app ID">
+<div class="actions"><button id="test">Run connection test</button><button id="close" class="secondary">Close connection</button></div>
+<p class="hint">The test opens Deriv's public WebSocket and sends a lightweight ping. It records whether the socket opens, whether a response arrives, and any close code or browser error.</p>
+</section>
+<section class="panel"><div class="row">
+<div class="metric"><small>WebSocket state</small><strong id="state">Not started</strong></div>
+<div class="metric"><small>Ping response</small><strong id="ping">Not received</strong></div>
+<div class="metric"><small>Close code</small><strong id="code">—</strong></div>
+<div class="metric"><small>Close reason</small><strong id="reason">—</strong></div>
+</div></section>
+<section class="panel"><b>Diagnostic log</b><pre id="log">Ready. Tap “Run connection test”.</pre></section>
+<section class="panel"><b>How to send the result</b><ol class="hint"><li>Tap “Run connection test” once.</li><li>Wait up to 15 seconds.</li><li>Take a screenshot showing the status and diagnostic log.</li></ol><p class="hint">A successful ping confirms the browser can exchange messages with Deriv's WebSocket endpoint. It does not yet validate candle subscriptions or match your MT5 broker feed.</p></section>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);let socket=null,timer=null,manual=false;
+function log(s){$("log").textContent=new Date().toLocaleTimeString()+"  "+s+"\n"+$("log").textContent}
+function status(s,kind){$("status").textContent=s;$("status").className="status "+(kind||"")}
+function setState(s){$("state").textContent=s}
+function stopTimer(){clearTimeout(timer);timer=null}
+function closeTest(){manual=true;stopTimer();if(socket){try{socket.close(1000,"Diagnostic finished")}catch(e){}socket=null}status("Closed","");setState("Closed by user");log("Connection closed by user.")}
+function run(){
+ manual=false;stopTimer();if(socket){try{socket.close()}catch(e){}}
+ $("ping").textContent="Waiting";$("code").textContent="—";$("reason").textContent="—";setState("Connecting");status("Connecting…","warn");
+ const appid=$("appid").value.trim();if(!appid){status("App ID required","bad");setState("Not connected");return}
+ const url="wss://ws.derivws.com/websockets/v3?app_id="+encodeURIComponent(appid);
+ log("Opening "+url);
+ try{socket=new WebSocket(url)}catch(e){status("Could not create socket","bad");setState("Constructor error");log("Constructor exception: "+e.message);return}
+ let opened=false,responded=false;
+ timer=setTimeout(()=>{if(!responded){status("Timed out waiting for ping","bad");log("No ping response within 15 seconds. Socket state: "+socket.readyState+".");}},15000);
+ socket.onopen=()=>{
+  opened=true;setState("Open");status("Socket opened","good");log("WebSocket handshake succeeded.");
+  try{socket.send(JSON.stringify({ping:1}));log('Sent {"ping":1}.');}
+  catch(e){status("Send failed","bad");log("Send exception: "+e.message);}
+ };
+ socket.onmessage=e=>{
+  log("Message received: "+String(e.data).slice(0,700));
+  let d;try{d=JSON.parse(e.data)}catch(err){return}
+  if(d.msg_type==="ping"||Object.prototype.hasOwnProperty.call(d,"ping")){
+   responded=true;stopTimer();$("ping").textContent="Received";$("ping").className="good";status("Ping successful","good");setState("Open · responding");log("Ping response received successfully.");
+  }
+  if(d.error){stopTimer();$("ping").textContent="API error";$("ping").className="bad";status("API error response","bad");log("API error: "+(d.error.message||"Unknown error"));}
+ };
+ socket.onerror=()=>{status("Browser WebSocket error","bad");setState("Error event");log("Browser fired onerror. Browsers often hide the underlying network/TLS cause.");};
+ socket.onclose=e=>{
+  stopTimer();$("code").textContent=String(e.code);$("reason").textContent=e.reason||"(none)";
+  setState("Closed");log("Close event: code="+e.code+", wasClean="+e.wasClean+", reason="+(e.reason||"(none)"));
+  if(!manual){status("Connection closed","bad");if(opened&&!responded)log("Socket opened but closed before a ping response.");}
+ };
+}
+$("test").addEventListener("click",run);$("close").addEventListener("click",closeTest);
+})();
+</script>
+</main></body></html>
