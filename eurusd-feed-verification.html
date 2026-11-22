@@ -47,15 +47,15 @@ function send(obj){if(!ws||ws.readyState!==WebSocket.OPEN)throw new Error("WebSo
 function fmt(v){return typeof v==="number"?v.toFixed(5):String(v??"—")}
 function handleSymbols(data){
  const list=data.active_symbols||[];
- const matches=list.filter(x=>String(x.symbol||"").toUpperCase().includes("EURUSD")||String(x.display_name||"").toUpperCase().includes("EUR/USD")||String(x.display_name||"").toUpperCase().includes("EURUSD"));
- $("matches").textContent=matches.length?matches.map(x=>(x.display_name||"") +" — "+(x.symbol||"symbol unavailable")).join("\n"):"No EURUSD match found in active_symbols response.";
+ const matches=list.filter(x=>String(x.underlying_symbol||x.symbol||"").toUpperCase().includes("EURUSD")||String(x.underlying_symbol_name||x.display_name||"").toUpperCase().includes("EUR/USD")||String(x.underlying_symbol_name||x.display_name||"").toUpperCase().includes("EURUSD"));
+ $("matches").textContent=matches.length?matches.map(x=>(x.underlying_symbol_name||x.display_name||"") +" — "+(x.underlying_symbol||x.symbol||"symbol unavailable")).join("\n"):"No EURUSD match found in active_symbols response.";
  log("Active-symbol response received: "+list.length+" symbols; "+matches.length+" EURUSD match(es).");
  if(!matches.length){$("symbol").textContent="Not listed";status("Connected; symbol not found","warn");return}
- chosen=matches.find(x=>String(x.symbol||"").toLowerCase()==="frxeurusd")||matches[0];
- if(!chosen.symbol){$("symbol").textContent="No short code";return}
- $("symbol").textContent=chosen.symbol;status("EURUSD symbol found","good");
- send({ticks_history:chosen.symbol,count:30,end:"latest",style:"candles",granularity:60,req_id:2});
- send({ticks:chosen.symbol,subscribe:1,req_id:3});
+ chosen=matches.find(x=>String(x.underlying_symbol||x.symbol||"").toLowerCase()==="frxeurusd")||matches[0];
+ const symbol=chosen.underlying_symbol||chosen.symbol;if(!symbol){$("symbol").textContent="No short code";return}
+ $("symbol").textContent=symbol;status("EURUSD symbol found","good");
+ send({ticks_history:symbol,count:30,end:"latest",style:"candles",granularity:60,req_id:2});
+ send({ticks:symbol,subscribe:1,req_id:3});
 }
 function renderCandles(history){
  const candles=history.candles||[];
