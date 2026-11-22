@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LUNA FX — EURUSD Feed Verification</title>
+<style>
+:root{color-scheme:dark;--bg:#081321;--panel:#122137;--line:#2b405b;--muted:#9aacc2;--green:#39d6a0;--red:#ff7185;--amber:#ffc66d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#edf4ff;font:15px system-ui,Arial}main{max-width:850px;margin:auto;padding:18px}
+h1{font-size:23px;margin:0 0 6px}.muted{color:var(--muted);font-size:13px;line-height:1.55}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px;margin:13px 0}
+button{width:100%;padding:13px;border-radius:9px;border:1px solid #286b9e;background:#174d78;color:white;font:inherit;font-weight:700}
+.status{display:inline-block;padding:7px 11px;border-radius:24px;background:#293a50;color:var(--amber);font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.metric{background:#0a1728;border:1px solid var(--line);padding:11px;border-radius:10px;min-width:0}
+.metric small{display:block;color:var(--muted)}.metric strong{display:block;font-size:17px;margin-top:5px;overflow-wrap:anywhere}
+.good{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--amber)}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;font:12px ui-monospace,monospace;color:#bfd0e4}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:right;padding:7px;border-bottom:1px solid var(--line)}td:first-child,th:first-child{text-align:left}
+@media(max-width:420px){.grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body><main>
+<h1>🐺 LUNA FX — EURUSD Feed Verification</h1>
+<p class="muted">Read-only public market-data test. No MT5 login, password, API token, account access or trade execution.</p>
+<section class="panel">
+<span id="status" class="status">Not connected</span>
+<p class="muted">This test connects to Deriv's documented public market-data WebSocket, requests the active-symbol list, then checks whether an EURUSD symbol is exposed. If found, it requests recent 1-minute candles and subscribes to ticks.</p>
+<button id="connect">Connect and test EURUSD</button>
+</section>
+<section class="panel"><div class="grid">
+<div class="metric"><small>Connection</small><strong id="connection">Not started</strong></div>
+<div class="metric"><small>EURUSD symbol</small><strong id="symbol">Not checked</strong></div>
+<div class="metric"><small>Latest public tick</small><strong id="price">—</strong></div>
+<div class="metric"><small>Last tick time</small><strong id="ticktime">—</strong></div>
+</div></section>
+<section class="panel"><b>Symbol matches</b><p class="muted" id="matches">Waiting for active-symbol response.</p></section>
+<section class="panel"><b>Recent 1-minute candles</b><div style="overflow-x:auto"><table><thead><tr><th>Time (UTC)</th><th>Open</th><th>High</th><th>Low</th><th>Close</th></tr></thead><tbody id="candles"><tr><td colspan="5">No candles received yet.</td></tr></tbody></table></div></section>
+<section class="panel"><b>Diagnostic log</b><pre id="log">Ready. Tap the button to begin.</pre></section>
+<section class="panel"><b>Important price-matching note</b><p class="muted">A successful public-feed test proves that Deriv's public API supplies data for the returned symbol. It does NOT prove that the quote is identical to your Deriv MT5 account on DerivSVG-Server-03. We will compare live bid/ask values with MT5 at the same time before calling the feed an MT5 match.</p></section>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);let ws=null,chosen=null,finished=false;
+const endpoint="wss://api.derivws.com/trading/v1/options/ws/public";
+function log(s){$("log").textContent=new Date().toLocaleTimeString()+"  "+s+"\n"+$("log").textContent}
+function status(s,c){$("status").textContent=s;$("status").className="status "+(c||"")}
+function send(obj){if(!ws||ws.readyState!==WebSocket.OPEN)throw new Error("WebSocket is not open");ws.send(JSON.stringify(obj));log("Sent "+JSON.stringify(obj))}
+function fmt(v){return typeof v==="number"?v.toFixed(5):String(v??"—")}
+function handleSymbols(data){
+ const list=data.active_symbols||[];
+ const matches=list.filter(x=>String(x.symbol||"").toUpperCase().includes("EURUSD")||String(x.display_name||"").toUpperCase().includes("EUR/USD")||String(x.display_name||"").toUpperCase().includes("EURUSD"));
+ $("matches").textContent=matches.length?matches.map(x=>(x.display_name||"") +" — "+(x.symbol||"symbol unavailable")).join("\n"):"No EURUSD match found in active_symbols response.";
+ log("Active-symbol response received: "+list.length+" symbols; "+matches.length+" EURUSD match(es).");
+ if(!matches.length){$("symbol").textContent="Not listed";status("Connected; symbol not found","warn");return}
+ chosen=matches.find(x=>String(x.symbol||"").toLowerCase()==="frxeurusd")||matches[0];
+ if(!chosen.symbol){$("symbol").textContent="No short code";return}
+ $("symbol").textContent=chosen.symbol;status("EURUSD symbol found","good");
+ send({ticks_history:chosen.symbol,count:30,end:"latest",style:"candles",granularity:60,req_id:2});
+ send({ticks:chosen.symbol,subscribe:1,req_id:3});
+}
+function renderCandles(history){
+ const candles=history.candles||[];
+ if(!candles.length){$("candles").innerHTML='<tr><td colspan="5">No candle records returned.</td></tr>';return}
+ $("candles").innerHTML=candles.slice(-30).map(c=>'<tr><td>'+new Date(Number(c.epoch)*1000).toISOString().slice(11,19)+'</td><td>'+fmt(Number(c.open))+'</td><td>'+fmt(Number(c.high))+'</td><td>'+fmt(Number(c.low))+'</td><td>'+fmt(Number(c.close))+'</td></tr>').join("");
+ log("Received "+candles.length+" historical candle(s).");
+}
+$("connect").addEventListener("click",()=>{
+ if(ws){try{ws.close()}catch(e){}}
+ chosen=null;finished=false;$("connection").textContent="Connecting";$("symbol").textContent="Checking";$("price").textContent="—";$("ticktime").textContent="—";$("candles").innerHTML='<tr><td colspan="5">Waiting…</td></tr>';$("matches").textContent="Waiting…";$("log").textContent="";status("Connecting","warn");
+ try{ws=new WebSocket(endpoint)}catch(e){status("Could not open socket","bad");$("connection").textContent="Failed";log(e.message);return}
+ ws.onopen=()=>{$("connection").textContent="Connected";status("Connected","good");log("WebSocket handshake succeeded.");send({active_symbols:"full",req_id:1})};
+ ws.onmessage=ev=>{
+  let d;try{d=JSON.parse(ev.data)}catch(e){log("Received non-JSON message.");return}
+  if(d.error){log("API error: "+(d.error.message||JSON.stringify(d.error)));if(d.req_id===1){status("Symbol request failed","bad");$("symbol").textContent="Request error"}return}
+  if(d.msg_type==="active_symbols")handleSymbols(d);
+  if(d.msg_type==="history")renderCandles(d.history||{});
+  if(d.msg_type==="candles")renderCandles({candles:d.candles||[]});
+  if(d.msg_type==="tick"&&d.tick){$("price").textContent=fmt(Number(d.tick.quote));$("ticktime").textContent=new Date(Number(d.tick.epoch)*1000).toISOString();status("Live tick received","good");log("Live tick: "+d.tick.quote+" at "+d.tick.epoch)}
+ };
+ ws.onerror=()=>{status("WebSocket error","bad");$("connection").textContent="Error";log("Browser reported a WebSocket error; the browser may not expose the underlying network cause.")};
+ ws.onclose=e=>{$("connection").textContent="Closed ("+e.code+")";if(!finished)status("Connection closed","warn");log("Socket closed: code="+e.code+" reason="+(e.reason||"(none)"))};
+});
+})();
+</script>
+</main></body></html>
