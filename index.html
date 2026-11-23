@@ -98,6 +98,8 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
  <div class="metric"><div class="k">Connection</div><strong id="connection">Not started</strong></div>
  <div class="metric"><div class="k">Selected symbol</div><strong id="symbol">frxEURUSD (pending)</strong></div>
  <div class="metric"><div class="k">Last update (UTC)</div><strong id="updated">—</strong></div>
+ <div class="metric"><div class="k">Browser clock (Lagos)</div><strong id="deviceClock">—</strong></div>
+ <div class="metric"><div class="k">Tick age / clock offset</div><strong id="tickAge">—</strong></div>
  <div class="metric"><div class="k">Feed type</div><strong>Public API · unauthenticated</strong></div>
 </div><p class="note" id="message" style="margin-bottom:0">Tap “Connect live feed” to load recent candles and subscribe to live ticks.</p></section>
 <p class="footer">LUNA FX is an informational charting prototype. Public API prices may differ from your Deriv MT5 account by feed, spread, timing, or server conditions. No login, password, API token, account access, deposits, or trade execution are used. Always verify prices and analysis independently.</p>
@@ -113,7 +115,18 @@ var $=function(id){return document.getElementById(id)};
 function setStatus(text,live){$("status").innerHTML='<i class="dot"></i>'+text;$("status").className="status"+(live?" live":"")}
 function send(o){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(o))}
 function fmt(n){return Number.isFinite(n)?n.toFixed(5):"—"}
-function timeText(epoch){return new Date(epoch*1000).toISOString().replace("T"," ").slice(0,19)}
+function timeText(epoch,zone){
+ var parts=new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(new Date(epoch*1000)),p={};
+ parts.forEach(function(part){if(part.type!=="literal")p[part.type]=part.value});
+ return p.year+"-"+p.month+"-"+p.day+" "+p.hour+":"+p.minute+":"+p.second;
+}
+function updateClockDiagnostics(){
+ var now=Date.now()/1000;
+ $("deviceClock").textContent=timeText(now,"Africa/Lagos")+" WAT";
+ if(!lastTickEpoch){$("tickAge").textContent="Waiting for tick";return}
+ var delta=now-lastTickEpoch;
+ $("tickAge").textContent=delta>=0?Math.floor(delta)+"s old":"Device clock behind feed by "+Math.ceil(-delta)+"s";
+}
 var ema=window.LunaIndicators.ema;
 var rsi=window.LunaIndicators.rsi;
 function confirmedSwings(data){
@@ -206,7 +219,7 @@ function drawRsi(vals){
 }
 function upsertTick(t){
  var epoch=Number(t.epoch),price=Number(t.quote);if(!Number.isFinite(epoch)||!Number.isFinite(price))return;
- lastTickEpoch=epoch;reconnectAttempts=0;$("price").textContent=fmt(price);$("ticktime").textContent=timeText(epoch)+" UTC";$("updated").textContent=timeText(epoch);$("message").textContent="Live EURUSD ticks are arriving. Current chart candle is updated from the public tick stream.";
+ lastTickEpoch=epoch;reconnectAttempts=0;$("price").textContent=fmt(price);$("ticktime").textContent=timeText(epoch,"Africa/Lagos")+" WAT · "+timeText(epoch,"UTC")+" UTC";$("updated").textContent=timeText(epoch,"UTC");updateClockDiagnostics();$("message").textContent="Live EURUSD ticks are arriving. Current chart candle is updated from the public tick stream.";
  var minute=Math.floor(epoch/60)*60,last=bars[bars.length-1];
  if(!last||last.epoch<minute){bars.push({epoch:minute,open:price,high:price,low:price,close:price});if(bars.length>240)bars.shift()}
  else if(last.epoch===minute){last.high=Math.max(last.high,price);last.low=Math.min(last.low,price);last.close=price}
@@ -273,6 +286,7 @@ function scheduleReconnect(){
 }
 $("connect").addEventListener("click",function(){reconnectAttempts=0;connectFeed(false)});
 setInterval(function(){
+ updateClockDiagnostics();
  if(!connected)return;
  var elapsed=lastTickEpoch?Date.now()/1000-lastTickEpoch:(Date.now()-connectedAt)/1000;
  if(elapsed>60){
