@@ -4,7 +4,7 @@ const assert=require("node:assert/strict");
 const {ema,rsi}=require("../indicators.js");
 
 test("EMA seeds with first close and applies standard smoothing",()=>{
- assert.deepEqual(ema([1,2,3],2),[1,1+2/3,1+2/3+ (1/3)*(2/3)]);
+ assert.deepEqual(ema([1,2,3],2),[1,1+2/3,2+(1/3)*(1+2/3)]);
 });
 test("EMA returns an empty array for empty history",()=>assert.deepEqual(ema([],20),[]));
 test("RSI returns null until a full lookback is available",()=>{
@@ -23,7 +23,7 @@ test("RSI uses Wilder smoothing after the initial average",()=>{
  const values=[1,2,1,2,1];
  const result=rsi(values,2);
  assert.equal(result.length,values.length);
- assert.ok(Math.abs(result[4]-100/3)<1e-8);
+ assert.ok(Math.abs(result[4]-37.5)<1e-8);
 });
 test("indicator functions reject invalid periods and non-finite inputs",()=>{
  assert.throws(()=>ema([1,2],0),TypeError);
