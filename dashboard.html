@@ -67,7 +67,7 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
 </div>
 <section class="panel wide" id="mt5Compare">
  <h2>Deriv MT5 price comparison</h2>
- <p class="note">Enter the Bid and Ask currently displayed in your Deriv MT5 EURUSD Quotes screen, then tap Compare. Use values captured at the same moment as the live public price above. This is a manual, read-only comparison; it does not connect to or access your MT5 account.</p>
+ <p class="note">Enter the MT5 Bid and Ask captured at the same moment as the live public price, then tap Compare. This is a manual, read-only snapshot; it does not connect to or access your MT5 account. The result stays fixed when the live price moves, so take a fresh MT5 quote and compare again for each new sample.</p>
  <div class="formgrid">
   <label><span class="k">MT5 Bid</span><input id="mt5Bid" type="number" inputmode="decimal" step="0.00001" placeholder="e.g. 1.09360"></label>
   <label><span class="k">MT5 Ask</span><input id="mt5Ask" type="number" inputmode="decimal" step="0.00001" placeholder="e.g. 1.09370"></label>
@@ -124,7 +124,7 @@ function updateComparison(){
  $("cmpAskDiff").textContent=(askDiff>=0?"+":"")+askDiff.toFixed(1)+" pips";
  $("cmpPosition").textContent=pub<bid?"Below Bid":pub>ask?"Above Ask":"Inside MT5 spread";
  $("cmpStatus").textContent="Compared";$("cmpStatus").className="bull";
- $("cmpNote").textContent="Calculated against the latest public tick and the MT5 values entered. Public tick timestamp: "+($("ticktime").textContent||"not available")+". For a meaningful feed check, capture MT5 Bid/Ask and public tick together; repeat several times to assess consistency.";
+ $("cmpNote").textContent="Snapshot comparison captured now. Public tick timestamp: "+($("ticktime").textContent||"not available")+". This result will not change as new ticks arrive. Capture fresh MT5 Bid/Ask values and tap Compare again for another sample.";
 }
 function draw(){
  var closes=bars.map(function(b){return b.close}),e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14),enoughEma=bars.length>=50;
@@ -177,7 +177,7 @@ function drawRsi(vals){
 }
 function upsertTick(t){
  var epoch=Number(t.epoch),price=Number(t.quote);if(!Number.isFinite(epoch)||!Number.isFinite(price))return;
- lastTickEpoch=epoch;$("price").textContent=fmt(price);$("ticktime").textContent=timeText(epoch)+" UTC";$("updated").textContent=timeText(epoch);$("message").textContent="Live EURUSD ticks are arriving. Current chart candle is updated from the public tick stream.";if($("mt5Bid").value&&$("mt5Ask").value)updateComparison();
+ lastTickEpoch=epoch;$("price").textContent=fmt(price);$("ticktime").textContent=timeText(epoch)+" UTC";$("updated").textContent=timeText(epoch);$("message").textContent="Live EURUSD ticks are arriving. Current chart candle is updated from the public tick stream.";
  var minute=Math.floor(epoch/60)*60,last=bars[bars.length-1];
  if(!last||last.epoch<minute){bars.push({epoch:minute,open:price,high:price,low:price,close:price});if(bars.length>240)bars.shift()}
  else if(last.epoch===minute){last.high=Math.max(last.high,price);last.low=Math.min(last.low,price);last.close=price}
@@ -186,13 +186,11 @@ function upsertTick(t){
 function onSymbols(d){
  var list=d.active_symbols||[],found=list.filter(function(z){return String(z.underlying_symbol||z.symbol||"").toLowerCase()==="frxeurusd"||String(z.underlying_symbol_name||z.display_name||"").toUpperCase().indexOf("EUR/USD")>=0});
  if(!found.length){$("message").textContent="EURUSD was not found in the public active-symbol list.";setStatus("Symbol unavailable",false);return}
- symbol=found[0].underlying_symbol||found[0].symbol||"frxEURUSD";$("symbol").textContent=symbol;
+ var exact=found.find(function(z){return String(z.underlying_symbol||z.symbol||"").toLowerCase()==="frxeurusd"});var selected=exact||found[0];symbol=selected.underlying_symbol||selected.symbol||"frxEURUSD";$("symbol").textContent=symbol;
  send({ticks_history:symbol,count:120,end:"latest",style:"candles",granularity:60,req_id:2});
  send({ticks:symbol,subscribe:1,req_id:3});
 }
 $("compareBtn").addEventListener("click",updateComparison);
-$("mt5Bid").addEventListener("change",function(){if($("mt5Ask").value)updateComparison()});
-$("mt5Ask").addEventListener("change",function(){if($("mt5Bid").value)updateComparison()});
 var reconnectTimer=null,reconnectAttempts=0,connectedAt=0;
 function connectFeed(isRetry){
  if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null}
