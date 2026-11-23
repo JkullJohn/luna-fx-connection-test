@@ -24,7 +24,11 @@ canvas{width:100%;height:100%;display:block}.legend{display:flex;gap:13px;flex-w
 .level{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.level:last-child{border:0}
 .note{color:var(--muted);font-size:11px;line-height:1.5}.wide{margin-top:12px}.footer{margin:14px 2px;color:var(--muted);font-size:11px;line-height:1.55}
 @media(max-width:760px){main{padding:11px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.layout{grid-template-columns:1fr}.chart-wrap{height:280px}}
-@media(max-width:360px){.v{font-size:17px}}
+input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:11px;font:inherit}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.comparegrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:12px}
+@media(max-width:760px){.comparegrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:360px){.v{font-size:17px}.formgrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body><main>
@@ -48,11 +52,11 @@ canvas{width:100%;height:100%;display:block}.legend{display:flex;gap:13px;flex-w
  </section>
  <aside>
   <section class="panel"><h2>Market structure</h2><div class="metrics">
-   <div class="metric"><div class="k">Short-term trend</div><strong id="trend">—</strong></div>
-   <div class="metric"><div class="k">Structure</div><strong id="structure">—</strong></div>
+   <div class="metric"><div class="k">Price structure trend</div><strong id="trend">—</strong></div>
+   <div class="metric"><div class="k">Swing structure</div><strong id="structure">—</strong></div>
    <div class="metric"><div class="k">Support estimate</div><strong id="support">—</strong></div>
    <div class="metric"><div class="k">Resistance estimate</div><strong id="resistance">—</strong></div>
-  </div><p class="note" style="margin:10px 0 0">Levels are calculated from recent one-minute candle highs/lows. They are estimates, not guaranteed turning points.</p></section>
+  </div><p class="note" style="margin:10px 0 0">Trend is based on the two latest confirmed swing highs and lows (2 candles on each side). If the swing signals disagree or are incomplete, the dashboard reports Mixed/Building instead of forcing a direction. EMA bias is shown separately above.</p></section>
   <section class="panel wide"><h2>Indicator interpretation</h2>
    <div class="level"><span class="k">EMA relationship</span><b id="emaSignal" class="neutral">Pending</b></div>
    <div class="level"><span class="k">RSI condition</span><b id="rsiSignal" class="neutral">Pending</b></div>
@@ -61,6 +65,24 @@ canvas{width:100%;height:100%;display:block}.legend{display:flex;gap:13px;flex-w
   </section>
  </aside>
 </div>
+<section class="panel wide" id="mt5Compare">
+ <h2>Deriv MT5 price comparison</h2>
+ <p class="note">Enter the Bid and Ask currently displayed in your Deriv MT5 EURUSD Quotes screen, then tap Compare. Use values captured at the same moment as the live public price above. This is a manual, read-only comparison; it does not connect to or access your MT5 account.</p>
+ <div class="formgrid">
+  <label><span class="k">MT5 Bid</span><input id="mt5Bid" type="number" inputmode="decimal" step="0.00001" placeholder="e.g. 1.09360"></label>
+  <label><span class="k">MT5 Ask</span><input id="mt5Ask" type="number" inputmode="decimal" step="0.00001" placeholder="e.g. 1.09370"></label>
+ </div>
+ <button id="compareBtn" type="button" style="margin-top:10px">Compare with latest public tick</button>
+ <div class="comparegrid">
+  <div class="metric"><div class="k">Public tick</div><strong id="cmpPublic">—</strong></div>
+  <div class="metric"><div class="k">MT5 spread</div><strong id="cmpSpread">—</strong></div>
+  <div class="metric"><div class="k">Public vs MT5 Bid</div><strong id="cmpBidDiff">—</strong></div>
+  <div class="metric"><div class="k">Public vs MT5 Ask</div><strong id="cmpAskDiff">—</strong></div>
+  <div class="metric"><div class="k">Public price position</div><strong id="cmpPosition">—</strong></div>
+  <div class="metric"><div class="k">Comparison status</div><strong id="cmpStatus">Not compared</strong></div>
+ </div>
+ <p class="note" id="cmpNote" style="margin-bottom:0">No MT5 values have been entered. Price differences are shown in pips (1 pip = 0.0001 for EURUSD). A one-time match does not prove long-term feed parity.</p>
+</section>
 <section class="panel wide"><h2>Feed diagnostics</h2><div class="metrics">
  <div class="metric"><div class="k">Connection</div><strong id="connection">Not started</strong></div>
  <div class="metric"><div class="k">Selected symbol</div><strong id="symbol">frxEURUSD (pending)</strong></div>
@@ -81,6 +103,29 @@ function fmt(n){return Number.isFinite(n)?n.toFixed(5):"—"}
 function timeText(epoch){return new Date(epoch*1000).toISOString().replace("T"," ").slice(0,19)}
 function ema(values,period){var out=[],k=2/(period+1),prev=null;values.forEach(function(v){prev=prev===null?v:v*k+prev*(1-k);out.push(prev)});return out}
 function rsi(values,period){var out=new Array(values.length).fill(null);if(values.length<=period)return out;var gain=0,loss=0,i;for(i=1;i<=period;i++){var d=values[i]-values[i-1];gain+=Math.max(d,0);loss+=Math.max(-d,0)}var ag=gain/period,al=loss/period;out[period]=al===0?100:100-100/(1+ag/al);for(i=period+1;i<values.length;i++){var diff=values[i]-values[i-1];ag=(ag*(period-1)+Math.max(diff,0))/period;al=(al*(period-1)+Math.max(-diff,0))/period;out[i]=al===0?100:100-100/(1+ag/al)}return out}
+function confirmedSwings(data){
+ var highs=[],lows=[],left=2,right=2;
+ for(var i=left;i<data.length-right;i++){
+  var isHigh=true,isLow=true;
+  for(var j=i-left;j<=i+right;j++){if(j===i)continue;if(data[j].high>=data[i].high)isHigh=false;if(data[j].low<=data[i].low)isLow=false}
+  if(isHigh)highs.push({index:i,price:data[i].high});
+  if(isLow)lows.push({index:i,price:data[i].low});
+ }
+ return {highs:highs,lows:lows};
+}
+function updateComparison(){
+ var pub=Number($("price").textContent),bid=Number($("mt5Bid").value),ask=Number($("mt5Ask").value);
+ if(!Number.isFinite(pub)||!Number.isFinite(bid)||!Number.isFinite(ask)||bid<=0||ask<=0||ask<bid){
+  $("cmpPublic").textContent=Number.isFinite(pub)?fmt(pub):"—";$("cmpSpread").textContent="—";$("cmpBidDiff").textContent="—";$("cmpAskDiff").textContent="—";$("cmpPosition").textContent="—";$("cmpStatus").textContent="Enter valid Bid/Ask";$("cmpNote").textContent="Enter positive MT5 prices with Ask greater than or equal to Bid. Then compare again.";return;
+ }
+ var spread=(ask-bid)/0.0001,bidDiff=(pub-bid)/0.0001,askDiff=(pub-ask)/0.0001;
+ $("cmpPublic").textContent=fmt(pub);$("cmpSpread").textContent=spread.toFixed(1)+" pips";
+ $("cmpBidDiff").textContent=(bidDiff>=0?"+":"")+bidDiff.toFixed(1)+" pips";
+ $("cmpAskDiff").textContent=(askDiff>=0?"+":"")+askDiff.toFixed(1)+" pips";
+ $("cmpPosition").textContent=pub<bid?"Below Bid":pub>ask?"Above Ask":"Inside MT5 spread";
+ $("cmpStatus").textContent="Compared";$("cmpStatus").className="bull";
+ $("cmpNote").textContent="Calculated against the latest public tick and the MT5 values entered. Public tick timestamp: "+($("ticktime").textContent||"not available")+". For a meaningful feed check, capture MT5 Bid/Ask and public tick together; repeat several times to assess consistency.";
+}
 function draw(){
  var closes=bars.map(function(b){return b.close}),e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14),enoughEma=bars.length>=50;
  $("barCount").textContent=bars.length+" one-minute candles";
@@ -102,8 +147,15 @@ function draw(){
  $("support").textContent=fmt(lo);$("resistance").textContent=fmt(hi);
  $("trend").textContent=enoughEma?(v20>v50?"Upward":v20<v50?"Downward":"Sideways"):"Building";
  $("trend").className=enoughEma?(v20>v50?"bull":v20<v50?"bear":"neutral"):"neutral";
- var last=bars.slice(-8),ups=0,downs=0;for(var j=1;j<last.length;j++){if(last[j].high>last[j-1].high&&last[j].low>last[j-1].low)ups++;if(last[j].high<last[j-1].high&&last[j].low<last[j-1].low)downs++}
- $("structure").textContent=ups>=3?"Higher highs/lows":downs>=3?"Lower highs/lows":"Mixed";
+ var swings=confirmedSwings(bars),h=swings.highs,l=swings.lows,highState="—",lowState="—",trendText="Building";
+ if(h.length>=2){var h1=h[h.length-2].price,h2=h[h.length-1].price;highState=h2>h1+0.00002?"Higher highs":h2<h1-0.00002?"Lower highs":"Equal highs"}
+ if(l.length>=2){var l1=l[l.length-2].price,l2=l[l.length-1].price;lowState=l2>l1+0.00002?"Higher lows":l2<l1-0.00002?"Lower lows":"Equal lows"}
+ if(highState==="Higher highs"&&lowState==="Higher lows")trendText="Upward";
+ else if(highState==="Lower highs"&&lowState==="Lower lows")trendText="Downward";
+ else if(h.length>=2&&l.length>=2)trendText="Mixed";
+ $("trend").textContent=trendText;
+ $("trend").className=trendText==="Upward"?"bull":trendText==="Downward"?"bear":"neutral";
+ $("structure").textContent=(h.length>=2?highState:"Highs building")+" / "+(l.length>=2?lowState:"Lows building");
  drawPrice(e20,e50);drawRsi(rv);
 }
 function setupCanvas(c){var rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;c.width=Math.max(1,Math.floor(rect.width*dpr));c.height=Math.max(1,Math.floor(rect.height*dpr));var x=c.getContext("2d");x.setTransform(dpr,0,0,dpr,0,0);return {ctx:x,w:rect.width,h:rect.height}}
@@ -125,7 +177,7 @@ function drawRsi(vals){
 }
 function upsertTick(t){
  var epoch=Number(t.epoch),price=Number(t.quote);if(!Number.isFinite(epoch)||!Number.isFinite(price))return;
- lastTickEpoch=epoch;$("price").textContent=fmt(price);$("ticktime").textContent=timeText(epoch)+" UTC";$("updated").textContent=timeText(epoch);$("message").textContent="Live EURUSD ticks are arriving. Current chart candle is updated from the public tick stream.";
+ lastTickEpoch=epoch;$("price").textContent=fmt(price);$("ticktime").textContent=timeText(epoch)+" UTC";$("updated").textContent=timeText(epoch);$("message").textContent="Live EURUSD ticks are arriving. Current chart candle is updated from the public tick stream.";if($("mt5Bid").value&&$("mt5Ask").value)updateComparison();
  var minute=Math.floor(epoch/60)*60,last=bars[bars.length-1];
  if(!last||last.epoch<minute){bars.push({epoch:minute,open:price,high:price,low:price,close:price});if(bars.length>240)bars.shift()}
  else if(last.epoch===minute){last.high=Math.max(last.high,price);last.low=Math.min(last.low,price);last.close=price}
@@ -138,6 +190,9 @@ function onSymbols(d){
  send({ticks_history:symbol,count:120,end:"latest",style:"candles",granularity:60,req_id:2});
  send({ticks:symbol,subscribe:1,req_id:3});
 }
+$("compareBtn").addEventListener("click",updateComparison);
+$("mt5Bid").addEventListener("change",function(){if($("mt5Ask").value)updateComparison()});
+$("mt5Ask").addEventListener("change",function(){if($("mt5Bid").value)updateComparison()});
 $("connect").addEventListener("click",function(){
  if(ws){try{ws.close()}catch(e){}}
  bars=[];lastTickEpoch=0;connected=false;$("connect").disabled=true;$("connect").textContent="Connecting…";$("connection").textContent="Connecting";$("message").textContent="Opening the unauthenticated public market-data connection…";setStatus("Connecting",false);
