@@ -193,19 +193,60 @@ function onSymbols(d){
 $("compareBtn").addEventListener("click",updateComparison);
 $("mt5Bid").addEventListener("change",function(){if($("mt5Ask").value)updateComparison()});
 $("mt5Ask").addEventListener("change",function(){if($("mt5Bid").value)updateComparison()});
-$("connect").addEventListener("click",function(){
- if(ws){try{ws.close()}catch(e){}}
- bars=[];lastTickEpoch=0;connected=false;$("connect").disabled=true;$("connect").textContent="Connecting…";$("connection").textContent="Connecting";$("message").textContent="Opening the unauthenticated public market-data connection…";setStatus("Connecting",false);
- try{ws=new WebSocket(endpoint)}catch(e){$("connection").textContent="Failed";$("message").textContent=e.message;setStatus("Connection failed",false);$("connect").disabled=false;$("connect").textContent="Reconnect";return}
- ws.onopen=function(){connected=true;$("connection").textContent="Connected";setStatus("Connected; loading data",true);send({active_symbols:"full",req_id:1})};
- ws.onmessage=function(ev){var d;try{d=JSON.parse(ev.data)}catch(e){return}if(d.error){$("message").textContent="API response: "+(d.error.message||"Unknown error");return}
- if(d.msg_type==="active_symbols")onSymbols(d);
- if((d.msg_type==="history"||d.msg_type==="candles")&&Array.isArray(d.candles)){bars=d.candles.map(function(c){return {epoch:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)}}).filter(function(c){return Number.isFinite(c.epoch)&&Number.isFinite(c.open)&&Number.isFinite(c.high)&&Number.isFinite(c.low)&&Number.isFinite(c.close)});draw();$("message").textContent="Loaded "+bars.length+" historical one-minute candles. Waiting for live ticks…"}
- if(d.msg_type==="tick"&&d.tick){upsertTick(d.tick);setStatus("Live tick received",true);$("connect").disabled=false;$("connect").textContent="Reconnect feed";}
+var reconnectTimer=null,reconnectAttempts=0,connectedAt=0;
+function connectFeed(isRetry){
+ if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null}
+ if(ws){try{ws.onclose=null;ws.close()}catch(e){}}
+ if(!isRetry){bars=[];lastTickEpoch=0;draw()}
+ connected=false;$("connect").disabled=true;$("connect").textContent=isRetry?"Reconnecting…":"Connecting…";
+ $("connection").textContent="Connecting";$("message").textContent=isRetry?"Restoring the public market-data connection…":"Opening the unauthenticated public market-data connection…";setStatus(isRetry?"Reconnecting":"Connecting",false);
+ var socket;
+ try{socket=new WebSocket(endpoint);ws=socket}
+ catch(e){$("connection").textContent="Failed";$("message").textContent=e.message;setStatus("Connection failed",false);scheduleReconnect();return}
+ socket.onopen=function(){
+  if(socket!==ws)return;
+  connected=true;connectedAt=Date.now();lastTickEpoch=0;reconnectAttempts=0;
+  $("connection").textContent="Connected";setStatus("Connected; loading data",true);send({active_symbols:"full",req_id:1});
  };
- ws.onerror=function(){$("connection").textContent="WebSocket error";$("message").textContent="The browser reported a WebSocket error. Check your connection and retry.";setStatus("Feed error",false)};
- ws.onclose=function(e){connected=false;$("connection").textContent="Closed ("+e.code+")";$("connect").disabled=false;$("connect").textContent="Reconnect";if(e.code!==1000)setStatus("Disconnected",false)};
-});
+ socket.onmessage=function(ev){
+  if(socket!==ws)return;
+  var d;try{d=JSON.parse(ev.data)}catch(e){return}
+  if(d.error){$("message").textContent="API response: "+(d.error.message||"Unknown error");return}
+  if(d.msg_type==="active_symbols")onSymbols(d);
+  if((d.msg_type==="history"||d.msg_type==="candles")&&Array.isArray(d.candles)){
+   var fresh=d.candles.map(function(c){return {epoch:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)}}).filter(function(c){return Number.isFinite(c.epoch)&&Number.isFinite(c.open)&&Number.isFinite(c.high)&&Number.isFinite(c.low)&&Number.isFinite(c.close)});
+   if(fresh.length)bars=fresh;draw();$("message").textContent="Loaded "+bars.length+" historical one-minute candles. Waiting for live ticks…";
+  }
+  if(d.msg_type==="tick"&&d.tick){upsertTick(d.tick);setStatus("Live tick received",true);$("connect").disabled=false;$("connect").textContent="Reconnect feed";}
+ };
+ socket.onerror=function(){
+  if(socket!==ws)return;
+  $("connection").textContent="WebSocket error";$("message").textContent="The browser reported a WebSocket error. The dashboard will retry automatically.";setStatus("Feed error",false);
+ };
+ socket.onclose=function(e){
+  if(socket!==ws)return;
+  connected=false;$("connection").textContent="Closed ("+e.code+")";$("connect").disabled=false;$("connect").textContent="Reconnect feed";
+  setStatus("Disconnected · retry scheduled",false);scheduleReconnect();
+ };
+}
+function scheduleReconnect(){
+ if(reconnectTimer)return;
+ var delay=Math.min(30000,2000*Math.pow(2,Math.min(reconnectAttempts,4)));
+ reconnectAttempts++;
+ $("connect").disabled=false;$("connect").textContent="Reconnect now";
+ $("message").textContent="The public feed is disconnected. Automatic retry in "+Math.round(delay/1000)+" seconds. You can also reconnect manually.";
+ reconnectTimer=setTimeout(function(){reconnectTimer=null;connectFeed(true)},delay);
+}
+$("connect").addEventListener("click",function(){reconnectAttempts=0;connectFeed(false)});
+setInterval(function(){
+ if(!connected)return;
+ var elapsed=lastTickEpoch?Date.now()/1000-lastTickEpoch:(Date.now()-connectedAt)/1000;
+ if(elapsed>60){
+  setStatus("Feed stale · reconnecting",false);
+  $("message").textContent="No live tick has arrived for 60 seconds. Reopening the public feed…";
+  if(ws&&ws.readyState===WebSocket.OPEN)ws.close();
+ }
+},10000);
 window.addEventListener("resize",function(){draw()});
 })();
 </script>
