@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#081321">
+<title>LUNA FX Intelligence — EURUSD</title>
+<style>
+:root{color-scheme:dark;--bg:#07111e;--panel:#101f33;--panel2:#0b192a;--line:#263b55;--muted:#91a5bd;--text:#edf4ff;--green:#35d6a0;--red:#ff7185;--amber:#ffc66d;--blue:#66b8ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,Segoe UI,Arial}
+main{max-width:1120px;margin:auto;padding:16px}.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-size:22px;margin:0}.sub{color:var(--muted);font-size:12px;margin:5px 0 0}
+button{border:1px solid #3474a6;background:#174d78;color:#fff;border-radius:9px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}.status{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line);border-radius:30px;color:var(--amber);font-size:12px}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor}.status.live{color:var(--green)}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:15px 0}
+.card,.panel{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:13px;min-width:0}
+.k{color:var(--muted);font-size:11px}.v{font-size:20px;font-weight:750;margin-top:5px;overflow-wrap:anywhere}.small{font-size:12px;color:var(--muted);margin-top:4px}
+.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);gap:12px}
+.panel h2{font-size:14px;margin:0 0 10px}.chart-wrap{height:340px;position:relative}.rsi-wrap{height:120px;position:relative;margin-top:10px}
+canvas{width:100%;height:100%;display:block}.legend{display:flex;gap:13px;flex-wrap:wrap;color:var(--muted);font-size:11px;margin:0 0 7px}.key{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:9px}.metric{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px}.metric strong{display:block;font-size:15px;margin-top:5px}
+.tag{display:inline-block;border-radius:20px;padding:4px 8px;font-size:11px;background:#20334a;color:var(--muted)}.bull{color:var(--green)}.bear{color:var(--red)}.neutral{color:var(--amber)}
+.level{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.level:last-child{border:0}
+.note{color:var(--muted);font-size:11px;line-height:1.5}.wide{margin-top:12px}.footer{margin:14px 2px;color:var(--muted);font-size:11px;line-height:1.55}
+@media(max-width:760px){main{padding:11px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.layout{grid-template-columns:1fr}.chart-wrap{height:280px}}
+@media(max-width:360px){.v{font-size:17px}}
+</style>
+</head>
+<body><main>
+<header class="top">
+ <div><h1>🐺 LUNA FX Intelligence</h1><p class="sub">EURUSD · Read-only market analysis · Public market-data feed</p></div>
+ <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span id="status" class="status"><i class="dot"></i>Not connected</span><button id="connect">Connect live feed</button></div>
+</header>
+<section class="grid">
+ <div class="card"><div class="k">EURUSD public price</div><div class="v" id="price">—</div><div class="small" id="ticktime">Waiting for live tick</div></div>
+ <div class="card"><div class="k">Market bias · EMA 20 / 50</div><div class="v" id="bias">—</div><div class="small" id="emaValues">EMA values pending</div></div>
+ <div class="card"><div class="k">RSI · 14</div><div class="v" id="rsi">—</div><div class="small" id="rsiState">Waiting for candles</div></div>
+ <div class="card"><div class="k">Data status</div><div class="v" id="dataStatus">Not loaded</div><div class="small" id="barCount">0 one-minute candles</div></div>
+</section>
+<div class="layout">
+ <section class="panel">
+  <h2>EURUSD · 1-minute candlestick chart</h2>
+  <div class="legend"><span><i class="key" style="background:#35d6a0"></i>Bull candle</span><span><i class="key" style="background:#ff7185"></i>Bear candle</span><span><i class="key" style="background:#66b8ff"></i>EMA 20</span><span><i class="key" style="background:#ffc66d"></i>EMA 50</span></div>
+  <div class="chart-wrap"><canvas id="priceChart" aria-label="EURUSD candlestick chart"></canvas></div>
+  <h2 style="margin-top:13px">Relative Strength Index · 14</h2>
+  <div class="rsi-wrap"><canvas id="rsiChart" aria-label="RSI chart"></canvas></div>
+ </section>
+ <aside>
+  <section class="panel"><h2>Market structure</h2><div class="metrics">
+   <div class="metric"><div class="k">Short-term trend</div><strong id="trend">—</strong></div>
+   <div class="metric"><div class="k">Structure</div><strong id="structure">—</strong></div>
+   <div class="metric"><div class="k">Support estimate</div><strong id="support">—</strong></div>
+   <div class="metric"><div class="k">Resistance estimate</div><strong id="resistance">—</strong></div>
+  </div><p class="note" style="margin:10px 0 0">Levels are calculated from recent one-minute candle highs/lows. They are estimates, not guaranteed turning points.</p></section>
+  <section class="panel wide"><h2>Indicator interpretation</h2>
+   <div class="level"><span class="k">EMA relationship</span><b id="emaSignal" class="neutral">Pending</b></div>
+   <div class="level"><span class="k">RSI condition</span><b id="rsiSignal" class="neutral">Pending</b></div>
+   <div class="level"><span class="k">Price vs EMA 20</span><b id="priceSignal" class="neutral">Pending</b></div>
+   <p class="note">These are descriptive indicator readings, not trade entries, recommendations, or predictions.</p>
+  </section>
+ </aside>
+</div>
+<section class="panel wide"><h2>Feed diagnostics</h2><div class="metrics">
+ <div class="metric"><div class="k">Connection</div><strong id="connection">Not started</strong></div>
+ <div class="metric"><div class="k">Selected symbol</div><strong id="symbol">frxEURUSD (pending)</strong></div>
+ <div class="metric"><div class="k">Last update (UTC)</div><strong id="updated">—</strong></div>
+ <div class="metric"><div class="k">Feed type</div><strong>Public API · unauthenticated</strong></div>
+</div><p class="note" id="message" style="margin-bottom:0">Tap “Connect live feed” to load recent candles and subscribe to live ticks.</p></section>
+<p class="footer">LUNA FX is an informational charting prototype. Public API prices may differ from your Deriv MT5 account by feed, spread, timing, or server conditions. No login, password, API token, account access, deposits, or trade execution are used. Always verify prices and analysis independently.</p>
+</main>
+<script>
+(function(){
+"use strict";
+var endpoint="wss://api.derivws.com/trading/v1/options/ws/public";
+var ws=null,symbol="frxEURUSD",bars=[],lastTickEpoch=0,connected=false;
+var $=function(id){return document.getElementById(id)};
+function setStatus(text,live){$("status").innerHTML='<i class="dot"></i>'+text;$("status").className="status"+(live?" live":"")}
+function send(o){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(o))}
+function fmt(n){return Number.isFinite(n)?n.toFixed(5):"—"}
+function timeText(epoch){return new Date(epoch*1000).toISOString().replace("T"," ").slice(0,19)}
+function ema(values,period){var out=[],k=2/(period+1),prev=null;values.forEach(function(v){prev=prev===null?v:v*k+prev*(1-k);out.push(prev)});return out}
+function rsi(values,period){var out=new Array(values.length).fill(null);if(values.length<=period)return out;var gain=0,loss=0,i;for(i=1;i<=period;i++){var d=values[i]-values[i-1];gain+=Math.max(d,0);loss+=Math.max(-d,0)}var ag=gain/period,al=loss/period;out[period]=al===0?100:100-100/(1+ag/al);for(i=period+1;i<values.length;i++){var diff=values[i]-values[i-1];ag=(ag*(period-1)+Math.max(diff,0))/period;al=(al*(period-1)+Math.max(-diff,0))/period;out[i]=al===0?100:100-100/(1+ag/al)}return out}
+function draw(){
+ var closes=bars.map(function(b){return b.close}),e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14);
+ $("barCount").textContent=bars.length+" one-minute candles";
+ $("dataStatus").textContent=bars.length>=50?"Ready":"Building";
+ if(!bars.length)return;
+ var a=bars[bars.length-1],v20=e20[e20.length-1],v50=e50[e50.length-1],r=rv[rv.length-1];
+ $("emaValues").textContent="20: "+fmt(v20)+" · 50: "+fmt(v50);
+ $("bias").textContent=v20>v50?"Bullish":v20<v50?"Bearish":"Neutral";
+ $("bias").className="v "+(v20>v50?"bull":v20<v50?"bear":"neutral");
+ $("emaSignal").textContent=v20>v50?"20 above 50":v20<v50?"20 below 50":"Lines converged";
+ $("emaSignal").className=v20>v50?"bull":v20<v50?"bear":"neutral";
+ $("priceSignal").textContent=a.close>v20?"Above EMA 20":a.close<v20?"Below EMA 20":"At EMA 20";
+ $("priceSignal").className=a.close>v20?"bull":a.close<v20?"bear":"neutral";
+ $("rsi").textContent=r===null?"—":r.toFixed(1);
+ $("rsiState").textContent=r===null?"Need more candles":r>=70?"Upper momentum zone":r<=30?"Lower momentum zone":"Middle range";
+ $("rsiSignal").textContent=r===null?"Pending":r>=70?"Above 70":r<=30?"Below 30":"Between 30 and 70";
+ $("rsiSignal").className=r===null?"neutral":r>=70?"bear":r<=30?"bull":"neutral";
+ var n=Math.min(50,bars.length),recent=bars.slice(-n),lo=Math.min.apply(null,recent.map(function(b){return b.low})),hi=Math.max.apply(null,recent.map(function(b){return b.high}));
+ $("support").textContent=fmt(lo);$("resistance").textContent=fmt(hi);
+ $("trend").textContent=v20>v50?"Upward":v20<v50?"Downward":"Sideways";
+ $("trend").className=v20>v50?"bull":v20<v50?"bear":"neutral";
+ var last=bars.slice(-8),ups=0,downs=0;for(var j=1;j<last.length;j++){if(last[j].high>last[j-1].high&&last[j].low>last[j-1].low)ups++;if(last[j].high<last[j-1].high&&last[j].low<last[j-1].low)downs++}
+ $("structure").textContent=ups>=3?"Higher highs/lows":downs>=3?"Lower highs/lows":"Mixed";
+ drawPrice(e20,e50);drawRsi(rv);
+}
+function setupCanvas(c){var rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;c.width=Math.max(1,Math.floor(rect.width*dpr));c.height=Math.max(1,Math.floor(rect.height*dpr));var x=c.getContext("2d");x.setTransform(dpr,0,0,dpr,0,0);return {ctx:x,w:rect.width,h:rect.height}}
+function drawPrice(e20,e50){
+ var c=$("priceChart"),s=setupCanvas(c),x=s.ctx,w=s.w,h=s.h,p={l:8,r:58,t:8,b:22},n=Math.min(70,bars.length),start=bars.length-n,data=bars.slice(start);
+ if(!data.length)return;
+ var min=Math.min.apply(null,data.map(function(b){return b.low})),max=Math.max.apply(null,data.map(function(b){return b.high})),pad=(max-min)*.09||.0001;min-=pad;max+=pad;
+ var Y=function(v){return p.t+(max-v)/(max-min)*(h-p.t-p.b)},plotW=w-p.l-p.r,step=plotW/data.length;
+ x.clearRect(0,0,w,h);x.font="10px system-ui";x.fillStyle="#91a5bd";x.strokeStyle="#263b55";x.lineWidth=1;
+ for(var g=0;g<=4;g++){var yy=p.t+g*(h-p.t-p.b)/4,val=max-g*(max-min)/4;x.beginPath();x.moveTo(p.l,yy);x.lineTo(w-p.r,yy);x.stroke();x.fillText(val.toFixed(5),w-p.r+5,yy+3)}
+ data.forEach(function(b,i){var cx=p.l+i*step+step/2,up=b.close>=b.open,color=up?"#35d6a0":"#ff7185";x.strokeStyle=color;x.fillStyle=color;x.beginPath();x.moveTo(cx,Y(b.high));x.lineTo(cx,Y(b.low));x.stroke();var top=Y(Math.max(b.open,b.close)),bottom=Y(Math.min(b.open,b.close));x.fillRect(cx-Math.max(1,step*.28),top,Math.max(2,step*.56),Math.max(1,bottom-top))});
+ function line(vals,color){x.beginPath();x.strokeStyle=color;x.lineWidth=1.5;var begun=false;for(var i=start;i<bars.length;i++){var val=vals[i];if(!Number.isFinite(val))continue;var xx=p.l+(i-start)*step+step/2,yy=Y(val);if(!begun){x.moveTo(xx,yy);begun=true}else x.lineTo(xx,yy)}x.stroke()}
+ line(e20,"#66b8ff");line(e50,"#ffc66d");
+}
+function drawRsi(vals){
+ var c=$("rsiChart"),s=setupCanvas(c),x=s.ctx,w=s.w,h=s.h,p={l:8,r:10,t:8,b:8},n=Math.min(70,vals.length),start=vals.length-n,plotW=w-p.l-p.r;
+ x.clearRect(0,0,w,h);x.font="10px system-ui";[30,50,70].forEach(function(v){var y=p.t+(100-v)/100*(h-p.t-p.b);x.strokeStyle="#334861";x.setLineDash([4,4]);x.beginPath();x.moveTo(p.l,y);x.lineTo(w-p.r,y);x.stroke();x.setLineDash([]);x.fillStyle="#91a5bd";x.fillText(String(v),p.l+3,y-3)});
+ x.beginPath();x.strokeStyle="#b59cff";x.lineWidth=1.7;var begun=false;for(var i=start;i<vals.length;i++){if(vals[i]===null)continue;var xx=p.l+(i-start)/(Math.max(1,n-1))*plotW,yy=p.t+(100-vals[i])/100*(h-p.t-p.b);if(!begun){x.moveTo(xx,yy);begun=true}else x.lineTo(xx,yy)}x.stroke();
+}
+function upsertTick(t){
+ var epoch=Number(t.epoch),price=Number(t.quote);if(!Number.isFinite(epoch)||!Number.isFinite(price))return;
+ lastTickEpoch=epoch;$("price").textContent=fmt(price);$("ticktime").textContent=timeText(epoch)+" UTC";$("updated").textContent=timeText(epoch);$("message").textContent="Live EURUSD ticks are arriving. Current chart candle is updated from the public tick stream.";
+ var minute=Math.floor(epoch/60)*60,last=bars[bars.length-1];
+ if(!last||last.epoch<minute){bars.push({epoch:minute,open:price,high:price,low:price,close:price});if(bars.length>240)bars.shift()}
+ else if(last.epoch===minute){last.high=Math.max(last.high,price);last.low=Math.min(last.low,price);last.close=price}
+ draw();
+}
+function onSymbols(d){
+ var list=d.active_symbols||[],found=list.filter(function(z){return String(z.underlying_symbol||z.symbol||"").toLowerCase()==="frxeurusd"||String(z.underlying_symbol_name||z.display_name||"").toUpperCase().indexOf("EUR/USD")>=0});
+ if(!found.length){$("message").textContent="EURUSD was not found in the public active-symbol list.";setStatus("Symbol unavailable",false);return}
+ symbol=found[0].underlying_symbol||found[0].symbol||"frxEURUSD";$("symbol").textContent=symbol;
+ send({ticks_history:symbol,count:120,end:"latest",style:"candles",granularity:60,req_id:2});
+ send({ticks:symbol,subscribe:1,req_id:3});
+}
+$("connect").addEventListener("click",function(){
+ if(ws){try{ws.close()}catch(e){}}
+ bars=[];lastTickEpoch=0;connected=false;$("connect").disabled=true;$("connect").textContent="Connecting…";$("connection").textContent="Connecting";$("message").textContent="Opening the unauthenticated public market-data connection…";setStatus("Connecting",false);
+ try{ws=new WebSocket(endpoint)}catch(e){$("connection").textContent="Failed";$("message").textContent=e.message;setStatus("Connection failed",false);$("connect").disabled=false;$("connect").textContent="Reconnect";return}
+ ws.onopen=function(){connected=true;$("connection").textContent="Connected";setStatus("Connected; loading data",true);send({active_symbols:"full",req_id:1})};
+ ws.onmessage=function(ev){var d;try{d=JSON.parse(ev.data)}catch(e){return}if(d.error){$("message").textContent="API response: "+(d.error.message||"Unknown error");return}
+ if(d.msg_type==="active_symbols")onSymbols(d);
+ if(d.msg_type==="history"&&d.history&&d.history.candles){bars=d.history.candles.map(function(c){return {epoch:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)}});draw();$("message").textContent="Loaded "+bars.length+" historical one-minute candles. Waiting for live ticks…"}
+ if(d.msg_type==="tick"&&d.tick){upsertTick(d.tick);setStatus("Live tick received",true)}
+ };
+ ws.onerror=function(){$("connection").textContent="WebSocket error";$("message").textContent="The browser reported a WebSocket error. Check your connection and retry.";setStatus("Feed error",false)};
+ ws.onclose=function(e){connected=false;$("connection").textContent="Closed ("+e.code+")";$("connect").disabled=false;$("connect").textContent="Reconnect";if(e.code!==1000)setStatus("Disconnected",false)};
+});
+window.addEventListener("resize",function(){draw()});
+})();
+</script>
+</body></html>
