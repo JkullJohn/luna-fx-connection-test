@@ -102,6 +102,7 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
 </div><p class="note" id="message" style="margin-bottom:0">Tap “Connect live feed” to load recent candles and subscribe to live ticks.</p></section>
 <p class="footer">LUNA FX is an informational charting prototype. Public API prices may differ from your Deriv MT5 account by feed, spread, timing, or server conditions. No login, password, API token, account access, deposits, or trade execution are used. Always verify prices and analysis independently.</p>
 </main>
+<script src="./indicators.js"></script>
 <script>
 (function(){
 "use strict";
@@ -113,8 +114,8 @@ function setStatus(text,live){$("status").innerHTML='<i class="dot"></i>'+text;$
 function send(o){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(o))}
 function fmt(n){return Number.isFinite(n)?n.toFixed(5):"—"}
 function timeText(epoch){return new Date(epoch*1000).toISOString().replace("T"," ").slice(0,19)}
-function ema(values,period){var out=[],k=2/(period+1),prev=null;values.forEach(function(v){prev=prev===null?v:v*k+prev*(1-k);out.push(prev)});return out}
-function rsi(values,period){var out=new Array(values.length).fill(null);if(values.length<=period)return out;var gain=0,loss=0,i;for(i=1;i<=period;i++){var d=values[i]-values[i-1];gain+=Math.max(d,0);loss+=Math.max(-d,0)}var ag=gain/period,al=loss/period;out[period]=al===0?(ag===0?50:100):100-100/(1+ag/al);for(i=period+1;i<values.length;i++){var diff=values[i]-values[i-1];ag=(ag*(period-1)+Math.max(diff,0))/period;al=(al*(period-1)+Math.max(-diff,0))/period;out[i]=al===0?(ag===0?50:100):100-100/(1+ag/al)}return out}
+var ema=window.LunaIndicators.ema;
+var rsi=window.LunaIndicators.rsi;
 function confirmedSwings(data){
  var highs=[],lows=[],left=2,right=2;
  for(var i=left;i<data.length-right;i++){
