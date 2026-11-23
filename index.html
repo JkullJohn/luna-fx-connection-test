@@ -27,6 +27,7 @@ canvas{width:100%;height:100%;display:block}.legend{display:flex;gap:13px;flex-w
 input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:11px;font:inherit}
 .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .comparegrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:12px}
+.tfgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.tfcard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}.tfcard strong{display:block;font-size:17px;margin-top:5px}.tfmeta{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}@media(max-width:520px){.tfgrid{grid-template-columns:1fr}}
 @media(max-width:760px){.comparegrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:360px){.v{font-size:17px}.formgrid{grid-template-columns:1fr}}
 </style>
@@ -65,6 +66,16 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
   </section>
  </aside>
 </div>
+<section class="panel wide" id="multiTimeframe">
+ <h2>Multi-timeframe market alignment</h2>
+ <p class="note">Independent public candle histories for M5, M15 and H1. Each timeframe calculates its own EMA 20/50 and RSI 14; readings are descriptive, not trade signals.</p>
+ <div class="tfgrid">
+  <div class="tfcard"><div class="k">M5 · 5-minute</div><strong id="tfM5">Loading…</strong><div class="tfmeta" id="tfM5meta">Waiting for candle history</div></div>
+  <div class="tfcard"><div class="k">M15 · 15-minute</div><strong id="tfM15">Loading…</strong><div class="tfmeta" id="tfM15meta">Waiting for candle history</div></div>
+  <div class="tfcard"><div class="k">H1 · 1-hour</div><strong id="tfH1">Loading…</strong><div class="tfmeta" id="tfH1meta">Waiting for candle history</div></div>
+ </div>
+ <p class="note" id="tfSummary" style="margin-bottom:0">Waiting for all timeframe histories. M1 remains in the main chart above.</p>
+</section>
 <section class="panel wide" id="mt5Compare">
  <h2>Deriv MT5 price comparison</h2>
  <p class="note">Enter the MT5 Bid and Ask captured at the same moment as the live public price, then tap Compare. This is a manual, read-only snapshot; it does not connect to or access your MT5 account. The result stays fixed when the live price moves, so take a fresh MT5 quote and compare again for each new sample.</p>
@@ -96,6 +107,7 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
 "use strict";
 var endpoint="wss://api.derivws.com/trading/v1/options/ws/public";
 var ws=null,symbol="frxEURUSD",bars=[],lastTickEpoch=0,connected=false;
+var tfFrames={300:{name:"M5",id:"tfM5"},900:{name:"M15",id:"tfM15"},3600:{name:"H1",id:"tfH1"}},tfResults={};
 var $=function(id){return document.getElementById(id)};
 function setStatus(text,live){$("status").innerHTML='<i class="dot"></i>'+text;$("status").className="status"+(live?" live":"")}
 function send(o){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(o))}
@@ -125,6 +137,22 @@ function updateComparison(){
  $("cmpPosition").textContent=pub<bid?"Below Bid":pub>ask?"Above Ask":"Inside MT5 spread";
  $("cmpStatus").textContent="Compared";$("cmpStatus").className="bull";
  $("cmpNote").textContent="Snapshot comparison captured now. Public tick timestamp: "+($("ticktime").textContent||"not available")+". This result will not change as new ticks arrive. Capture fresh MT5 Bid/Ask values and tap Compare again for another sample.";
+}
+function renderTimeframe(granularity,candles){
+ var cfg=tfFrames[granularity],closes=candles.map(function(c){return c.close});
+ if(!cfg||closes.length<50){if(cfg){$(cfg.id).textContent="Building";$(cfg.id+"meta").textContent=candles.length+" candles; 50 required for EMA 50"}return}
+ var e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14),a=closes[closes.length-1],v20=e20[e20.length-1],v50=e50[e50.length-1],r=rv[rv.length-1];
+ var bias=v20>v50?"Bullish":v20<v50?"Bearish":"Neutral";
+ $(cfg.id).textContent=bias;$(cfg.id).className=bias==="Bullish"?"bull":bias==="Bearish"?"bear":"neutral";
+ $(cfg.id+"meta").textContent="Close "+fmt(a)+" · EMA20 "+fmt(v20)+" · EMA50 "+fmt(v50)+" · RSI "+(r===null?"—":r.toFixed(1))+" · "+candles.length+" candles";
+ tfResults[granularity]={bias:bias,rsi:r,close:a};
+ var ready=Object.keys(tfResults).length;
+ if(ready===3){
+  var bullish=[300,900,3600].filter(function(g){return tfResults[g].bias==="Bullish"}).length;
+  var bearish=[300,900,3600].filter(function(g){return tfResults[g].bias==="Bearish"}).length;
+  var consensus=bullish===3?"All three timeframes bullish":bearish===3?"All three timeframes bearish":bullish>bearish?"Higher-timeframe alignment leans bullish":bearish>bullish?"Higher-timeframe alignment leans bearish":"Timeframes are mixed";
+  $("tfSummary").textContent=consensus+". Compare M5, M15 and H1 with M1; conflicting readings mean the market is not aligned across timeframes.";
+ }
 }
 function draw(){
  var closes=bars.map(function(b){return b.close}),e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14),enoughEma=bars.length>=50;
@@ -188,6 +216,7 @@ function onSymbols(d){
  if(!found.length){$("message").textContent="EURUSD was not found in the public active-symbol list.";setStatus("Symbol unavailable",false);return}
  var exact=found.find(function(z){return String(z.underlying_symbol||z.symbol||"").toLowerCase()==="frxeurusd"});var selected=exact||found[0];symbol=selected.underlying_symbol||selected.symbol||"frxEURUSD";$("symbol").textContent=symbol;
  send({ticks_history:symbol,count:120,end:"latest",style:"candles",granularity:60,req_id:2});
+ [ {g:300,id:5},{g:900,id:15},{g:3600,id:60} ].forEach(function(q){send({ticks_history:symbol,count:120,end:"latest",style:"candles",granularity:q.g,req_id:q.id})});
  send({ticks:symbol,subscribe:1,req_id:3});
 }
 $("compareBtn").addEventListener("click",updateComparison);
@@ -195,7 +224,7 @@ var reconnectTimer=null,reconnectAttempts=0,connectedAt=0;
 function connectFeed(isRetry){
  if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null}
  if(ws){try{ws.onclose=null;ws.close()}catch(e){}}
- if(!isRetry){bars=[];lastTickEpoch=0;draw()}
+ if(!isRetry){bars=[];lastTickEpoch=0;tfResults={};[300,900,3600].forEach(function(g){var c=tfFrames[g];$(c.id).textContent="Loading…";$(c.id+"meta").textContent="Waiting for candle history"});$("tfSummary").textContent="Waiting for all timeframe histories.";draw()}
  connected=false;$("connect").disabled=true;$("connect").textContent=isRetry?"Reconnecting…":"Connecting…";
  $("connection").textContent="Connecting";$("message").textContent=isRetry?"Restoring the public market-data connection…":"Opening the unauthenticated public market-data connection…";setStatus(isRetry?"Reconnecting":"Connecting",false);
  var socket;
@@ -212,6 +241,12 @@ function connectFeed(isRetry){
   if(d.error){$("message").textContent="API response: "+(d.error.message||"Unknown error");return}
   if(d.msg_type==="active_symbols")onSymbols(d);
   if((d.msg_type==="history"||d.msg_type==="candles")&&Array.isArray(d.candles)){
+   var granularityByReq={5:300,15:900,60:3600};
+   if(granularityByReq[d.req_id]){
+    var tfFresh=d.candles.map(function(c){return {epoch:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)}}).filter(function(c){return Number.isFinite(c.epoch)&&Number.isFinite(c.close)});
+    if(tfFresh.length){renderTimeframe(granularityByReq[d.req_id],tfFresh);$("message").textContent="M1, M5, M15 and H1 public candle histories are being loaded; live ticks update M1."}
+    return;
+   }
    var fresh=d.candles.map(function(c){return {epoch:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)}}).filter(function(c){return Number.isFinite(c.epoch)&&Number.isFinite(c.open)&&Number.isFinite(c.high)&&Number.isFinite(c.low)&&Number.isFinite(c.close)});
    if(fresh.length)bars=fresh;draw();$("message").textContent="Loaded "+bars.length+" historical one-minute candles. Waiting for live ticks…";
   }
