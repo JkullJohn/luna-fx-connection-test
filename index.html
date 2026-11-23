@@ -55,8 +55,8 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
   <section class="panel"><h2>Market structure</h2><div class="metrics">
    <div class="metric"><div class="k">Price structure trend</div><strong id="trend">—</strong></div>
    <div class="metric"><div class="k">Swing structure</div><strong id="structure">—</strong></div>
-   <div class="metric"><div class="k">Support estimate</div><strong id="support">—</strong></div>
-   <div class="metric"><div class="k">Resistance estimate</div><strong id="resistance">—</strong></div>
+   <div class="metric"><div class="k">50-candle low</div><strong id="support">—</strong></div>
+   <div class="metric"><div class="k">50-candle high</div><strong id="resistance">—</strong></div>
   </div><p class="note" style="margin:10px 0 0">Trend is based on the two latest confirmed swing highs and lows (2 candles on each side). If the swing signals disagree or are incomplete, the dashboard reports Mixed/Building instead of forcing a direction. EMA bias is shown separately above.</p></section>
   <section class="panel wide"><h2>Indicator interpretation</h2>
    <div class="level"><span class="k">EMA relationship</span><b id="emaSignal" class="neutral">Pending</b></div>
@@ -206,7 +206,7 @@ function drawRsi(vals){
 }
 function upsertTick(t){
  var epoch=Number(t.epoch),price=Number(t.quote);if(!Number.isFinite(epoch)||!Number.isFinite(price))return;
- lastTickEpoch=epoch;$("price").textContent=fmt(price);$("ticktime").textContent=timeText(epoch)+" UTC";$("updated").textContent=timeText(epoch);$("message").textContent="Live EURUSD ticks are arriving. Current chart candle is updated from the public tick stream.";
+ lastTickEpoch=epoch;reconnectAttempts=0;$("price").textContent=fmt(price);$("ticktime").textContent=timeText(epoch)+" UTC";$("updated").textContent=timeText(epoch);$("message").textContent="Live EURUSD ticks are arriving. Current chart candle is updated from the public tick stream.";
  var minute=Math.floor(epoch/60)*60,last=bars[bars.length-1];
  if(!last||last.epoch<minute){bars.push({epoch:minute,open:price,high:price,low:price,close:price});if(bars.length>240)bars.shift()}
  else if(last.epoch===minute){last.high=Math.max(last.high,price);last.low=Math.min(last.low,price);last.close=price}
@@ -233,7 +233,7 @@ function connectFeed(isRetry){
  catch(e){$("connection").textContent="Failed";$("message").textContent=e.message;setStatus("Connection failed",false);scheduleReconnect();return}
  socket.onopen=function(){
   if(socket!==ws)return;
-  connected=true;connectedAt=Date.now();lastTickEpoch=0;reconnectAttempts=0;
+  connected=true;connectedAt=Date.now();lastTickEpoch=0;
   $("connection").textContent="Connected";setStatus("Connected; loading data",true);send({active_symbols:"full",req_id:1});
  };
  socket.onmessage=function(ev){
