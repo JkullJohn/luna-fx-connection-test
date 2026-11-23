@@ -82,26 +82,26 @@ function timeText(epoch){return new Date(epoch*1000).toISOString().replace("T","
 function ema(values,period){var out=[],k=2/(period+1),prev=null;values.forEach(function(v){prev=prev===null?v:v*k+prev*(1-k);out.push(prev)});return out}
 function rsi(values,period){var out=new Array(values.length).fill(null);if(values.length<=period)return out;var gain=0,loss=0,i;for(i=1;i<=period;i++){var d=values[i]-values[i-1];gain+=Math.max(d,0);loss+=Math.max(-d,0)}var ag=gain/period,al=loss/period;out[period]=al===0?100:100-100/(1+ag/al);for(i=period+1;i<values.length;i++){var diff=values[i]-values[i-1];ag=(ag*(period-1)+Math.max(diff,0))/period;al=(al*(period-1)+Math.max(-diff,0))/period;out[i]=al===0?100:100-100/(1+ag/al)}return out}
 function draw(){
- var closes=bars.map(function(b){return b.close}),e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14);
+ var closes=bars.map(function(b){return b.close}),e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14),enoughEma=bars.length>=50;
  $("barCount").textContent=bars.length+" one-minute candles";
  $("dataStatus").textContent=bars.length>=50?"Ready":"Building";
  if(!bars.length)return;
  var a=bars[bars.length-1],v20=e20[e20.length-1],v50=e50[e50.length-1],r=rv[rv.length-1];
  $("emaValues").textContent="20: "+fmt(v20)+" · 50: "+fmt(v50);
- $("bias").textContent=v20>v50?"Bullish":v20<v50?"Bearish":"Neutral";
- $("bias").className="v "+(v20>v50?"bull":v20<v50?"bear":"neutral");
- $("emaSignal").textContent=v20>v50?"20 above 50":v20<v50?"20 below 50":"Lines converged";
- $("emaSignal").className=v20>v50?"bull":v20<v50?"bear":"neutral";
- $("priceSignal").textContent=a.close>v20?"Above EMA 20":a.close<v20?"Below EMA 20":"At EMA 20";
- $("priceSignal").className=a.close>v20?"bull":a.close<v20?"bear":"neutral";
+ $("bias").textContent=enoughEma?(v20>v50?"Bullish":v20<v50?"Bearish":"Neutral"):"Building";
+ $("bias").className="v "+(enoughEma?(v20>v50?"bull":v20<v50?"bear":"neutral"):"neutral");
+ $("emaSignal").textContent=enoughEma?(v20>v50?"20 above 50":v20<v50?"20 below 50":"Lines converged"):"Need 50 candles";
+ $("emaSignal").className=enoughEma?(v20>v50?"bull":v20<v50?"bear":"neutral"):"neutral";
+ $("priceSignal").textContent=enoughEma?(a.close>v20?"Above EMA 20":a.close<v20?"Below EMA 20":"At EMA 20"):"Pending";
+ $("priceSignal").className=enoughEma?(a.close>v20?"bull":a.close<v20?"bear":"neutral"):"neutral";
  $("rsi").textContent=r===null?"—":r.toFixed(1);
  $("rsiState").textContent=r===null?"Need more candles":r>=70?"Upper momentum zone":r<=30?"Lower momentum zone":"Middle range";
  $("rsiSignal").textContent=r===null?"Pending":r>=70?"Above 70":r<=30?"Below 30":"Between 30 and 70";
  $("rsiSignal").className=r===null?"neutral":r>=70?"bear":r<=30?"bull":"neutral";
  var n=Math.min(50,bars.length),recent=bars.slice(-n),lo=Math.min.apply(null,recent.map(function(b){return b.low})),hi=Math.max.apply(null,recent.map(function(b){return b.high}));
  $("support").textContent=fmt(lo);$("resistance").textContent=fmt(hi);
- $("trend").textContent=v20>v50?"Upward":v20<v50?"Downward":"Sideways";
- $("trend").className=v20>v50?"bull":v20<v50?"bear":"neutral";
+ $("trend").textContent=enoughEma?(v20>v50?"Upward":v20<v50?"Downward":"Sideways"):"Building";
+ $("trend").className=enoughEma?(v20>v50?"bull":v20<v50?"bear":"neutral"):"neutral";
  var last=bars.slice(-8),ups=0,downs=0;for(var j=1;j<last.length;j++){if(last[j].high>last[j-1].high&&last[j].low>last[j-1].low)ups++;if(last[j].high<last[j-1].high&&last[j].low<last[j-1].low)downs++}
  $("structure").textContent=ups>=3?"Higher highs/lows":downs>=3?"Lower highs/lows":"Mixed";
  drawPrice(e20,e50);drawRsi(rv);
@@ -145,8 +145,8 @@ $("connect").addEventListener("click",function(){
  ws.onopen=function(){connected=true;$("connection").textContent="Connected";setStatus("Connected; loading data",true);send({active_symbols:"full",req_id:1})};
  ws.onmessage=function(ev){var d;try{d=JSON.parse(ev.data)}catch(e){return}if(d.error){$("message").textContent="API response: "+(d.error.message||"Unknown error");return}
  if(d.msg_type==="active_symbols")onSymbols(d);
- if(d.msg_type==="history"&&d.history&&d.history.candles){bars=d.history.candles.map(function(c){return {epoch:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)}});draw();$("message").textContent="Loaded "+bars.length+" historical one-minute candles. Waiting for live ticks…"}
- if(d.msg_type==="tick"&&d.tick){upsertTick(d.tick);setStatus("Live tick received",true)}
+ if((d.msg_type==="history"||d.msg_type==="candles")&&Array.isArray(d.candles)){bars=d.candles.map(function(c){return {epoch:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)}}).filter(function(c){return Number.isFinite(c.epoch)&&Number.isFinite(c.open)&&Number.isFinite(c.high)&&Number.isFinite(c.low)&&Number.isFinite(c.close)});draw();$("message").textContent="Loaded "+bars.length+" historical one-minute candles. Waiting for live ticks…"}
+ if(d.msg_type==="tick"&&d.tick){upsertTick(d.tick);setStatus("Live tick received",true);$("connect").disabled=false;$("connect").textContent="Reconnect feed";}
  };
  ws.onerror=function(){$("connection").textContent="WebSocket error";$("message").textContent="The browser reported a WebSocket error. Check your connection and retry.";setStatus("Feed error",false)};
  ws.onclose=function(e){connected=false;$("connection").textContent="Closed ("+e.code+")";$("connect").disabled=false;$("connect").textContent="Reconnect";if(e.code!==1000)setStatus("Disconnected",false)};
