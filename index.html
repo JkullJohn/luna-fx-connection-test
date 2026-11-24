@@ -295,6 +295,14 @@ setInterval(function(){
   if(ws&&ws.readyState===WebSocket.OPEN)ws.close();
  }
 },10000);
+// Refresh the independent M5, M15 and H1 histories while the public socket is live.
+// This keeps higher-timeframe context current without requiring a page reconnect.
+setInterval(function(){
+ if(!ws||ws.readyState!==WebSocket.OPEN||!symbol)return;
+ [ {g:300,id:5},{g:900,id:15},{g:3600,id:60} ].forEach(function(q){
+  send({ticks_history:symbol,count:120,end:"latest",style:"candles",granularity:q.g,req_id:q.id});
+ });
+},60000);
 window.addEventListener("resize",function(){draw()});
 })();
 </script>
