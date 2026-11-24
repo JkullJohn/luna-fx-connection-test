@@ -154,11 +154,12 @@ function updateComparison(){
 }
 function renderTimeframe(granularity,candles){
  var cfg=tfFrames[granularity],closes=candles.map(function(c){return c.close});
- if(!cfg||closes.length<50){if(cfg){$(cfg.id).textContent="Building";$(cfg.id+"meta").textContent=candles.length+" candles; 50 required for EMA 50"}return}
+ var fetchedAt=timeText(Date.now()/1000,"Africa/Lagos")+" WAT";
+ if(!cfg||closes.length<50){if(cfg){$(cfg.id).textContent="Building";$(cfg.id+"meta").textContent=candles.length+" candles; 50 required for EMA 50 · updated "+fetchedAt}return}
  var e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14),a=closes[closes.length-1],v20=e20[e20.length-1],v50=e50[e50.length-1],r=rv[rv.length-1];
  var bias=v20>v50?"Bullish":v20<v50?"Bearish":"Neutral";
  $(cfg.id).textContent=bias;$(cfg.id).className=bias==="Bullish"?"bull":bias==="Bearish"?"bear":"neutral";
- $(cfg.id+"meta").textContent="Close "+fmt(a)+" · EMA20 "+fmt(v20)+" · EMA50 "+fmt(v50)+" · RSI "+(r===null?"—":r.toFixed(1))+" · "+candles.length+" candles";
+ $(cfg.id+"meta").textContent="Close "+fmt(a)+" · EMA20 "+fmt(v20)+" · EMA50 "+fmt(v50)+" · RSI "+(r===null?"—":r.toFixed(1))+" · "+candles.length+" candles · updated "+fetchedAt;
  tfResults[granularity]={bias:bias,rsi:r,close:a};
  var ready=Object.keys(tfResults).length;
  if(ready===3){
