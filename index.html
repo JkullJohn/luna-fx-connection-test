@@ -60,6 +60,14 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
    <div class="metric"><div class="k">Latest structure event</div><strong id="structureEvent">—</strong></div>
    <div class="metric"><div class="k">Event level</div><strong id="eventLevel">—</strong></div>
   </div><p class="note" id="structureNote" style="margin:10px 0 0">Confirmed swing points use two completed candles on each side. BOS marks a break in the current direction; CHoCH marks a break against the established structure. A close beyond a confirmed swing is required.</p></section>
+  <section class="panel wide"><h2>Automatic support &amp; resistance zones</h2>
+   <p class="note">Zones are grouped from confirmed swing highs and lows in the latest 120 M1 candles. Nearby pivots are clustered; touch counts describe historical reactions, not guaranteed future barriers.</p>
+   <div class="metrics">
+    <div class="metric"><div class="k">Nearest support zone</div><strong id="srSupport">Building</strong><div class="small" id="srSupportMeta">Waiting for confirmed swing lows</div></div>
+    <div class="metric"><div class="k">Nearest resistance zone</div><strong id="srResistance">Building</strong><div class="small" id="srResistanceMeta">Waiting for confirmed swing highs</div></div>
+   </div>
+   <p class="note" id="srNote" style="margin-bottom:0">Zones need confirmed pivots on both sides. Strength is based only on the number of clustered swing touches.</p>
+  </section>
   <section class="panel wide"><h2>Indicator interpretation</h2>
    <div class="level"><span class="k">EMA relationship</span><b id="emaSignal" class="neutral">Pending</b></div>
    <div class="level"><span class="k">RSI condition</span><b id="rsiSignal" class="neutral">Pending</b></div>
@@ -108,6 +116,7 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
 </main>
 <script src="./indicators.js"></script>
 <script src="./market-structure.js"></script>
+<script src="./support-resistance.js"></script>
 <script>
 (function(){
 "use strict";
@@ -191,6 +200,16 @@ function draw(){
  $("rsiSignal").textContent=r===null?"Pending":r>=70?"Above 70":r<=30?"Below 30":"Between 30 and 70";
  $("rsiSignal").className=r===null?"neutral":r>=70?"bear":r<=30?"bull":"neutral";
  var market=analyzeStructure(bars);
+ var zones=window.LunaZones.detect(bars,{lookback:120,mergeDistance:0.00025,maxZones:3});
+ function showZone(zone,id,metaId){
+  if(!zone){$(id).textContent="No confirmed zone";$(metaId).textContent="More completed candles needed";return}
+  $(id).textContent=fmt(zone.low)+" – "+fmt(zone.high);
+  $(metaId).textContent=zone.strength+" · "+zone.touches+" swing touch"+(zone.touches===1?"":"es")+" · "+zone.distancePips.toFixed(1)+" pips away";
+ }
+ showZone(zones.support[0],"srSupport","srSupportMeta");
+ showZone(zones.resistance[0],"srResistance","srResistanceMeta");
+ $("srNote").textContent="Based on "+zones.lookback+" recent M1 candles. Zones update as new candle history arrives; they are descriptive reference areas, not trade signals.";
+
  $("support").textContent=market.support===null?"Building":fmt(market.support);
  $("resistance").textContent=market.resistance===null?"Building":fmt(market.resistance);
  $("trend").textContent=market.trend;
