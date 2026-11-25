@@ -32,39 +32,28 @@
    if(b<a-tolerance)return down;
    return "Equal";
   }
-  var highState=classify(highs,"Higher highs","Lower highs");
-  var lowState=classify(lows,"Higher lows","Lower lows");
-  var trend=highState==="Higher highs"&&lowState==="Higher lows"?"Bullish":
-   highState==="Lower highs"&&lowState==="Lower lows"?"Bearish":
-   highState==="Building"||lowState==="Building"?"Building":"Mixed";
-  var lastEvent=null,bias=trend==="Bullish"?"bullish":trend==="Bearish"?"bearish":null;
-  var levels=[];
-  highs.forEach(function(p){levels.push({type:"high",point:p})});
-  lows.forEach(function(p){levels.push({type:"low",point:p})});
-  levels.sort(function(a,b){return a.point.index-b.point.index});
-  var used={};
-  for(var k=0;k<candles.length;k++){
-   var previous=k?candles[k-1].close:null,current=candles[k].close;
-   for(var m=0;m<levels.length;m++){
-    var item=levels[m],key=item.type+":"+item.point.index;
-    if(item.point.index>=k||used[key])continue;
-    var crossedUp=item.type==="high"&&previous!==null&&previous<=item.point.price&&current>item.point.price;
-    var crossedDown=item.type==="low"&&previous!==null&&previous>=item.point.price&&current<item.point.price;
-    if(!crossedUp&&!crossedDown)continue;
-    var direction=crossedUp?"bullish":"bearish";
-    var eventType=bias&&bias!==direction?"CHoCH":"BOS";
-    lastEvent={type:eventType,direction:direction,level:item.point.price,index:k,epoch:candles[k].epoch,brokenSwing:item.type};
-    bias=direction;used[key]=true;
-   }
+  function trendAt(index){
+   var h=highs.filter(function(p){return p.index<index}),l=lows.filter(function(p){return p.index<index});
+   var hs=classify(h,"Higher highs","Lower highs"),ls=classify(l,"Higher lows","Lower lows");
+   return hs==="Higher highs"&&ls==="Higher lows"?"bullish":hs==="Lower highs"&&ls==="Lower lows"?"bearish":null;
   }
-  return {
-   trend:trend,highState:highState,lowState:lowState,
-   swingHighs:highs.slice(-2),swingLows:lows.slice(-2),
-   support:lows.length?lows[lows.length-1].price:null,
-   resistance:highs.length?highs[highs.length-1].price:null,
-   lastEvent:lastEvent,confirmedSwingCount:{highs:highs.length,lows:lows.length},
-   method:{left:left,right:right,tolerance:tolerance}
-  };
+  var highState=classify(highs,"Higher highs","Lower highs"),lowState=classify(lows,"Higher lows","Lower lows");
+  var trend=highState==="Higher highs"&&lowState==="Higher lows"?"Bullish":highState==="Lower highs"&&lowState==="Lower lows"?"Bearish":highState==="Building"||lowState==="Building"?"Building":"Mixed";
+  var lastEvent=null,used={};
+  for(var k=1;k<candles.length;k++){
+   var availableHighs=highs.filter(function(p){return p.index<k&&!used["high:"+p.index]});
+   var availableLows=lows.filter(function(p){return p.index<k&&!used["low:"+p.index]});
+   var swingHigh=availableHighs[availableHighs.length-1],swingLow=availableLows[availableLows.length-1];
+   var previous=candles[k-1].close,current=candles[k].close;
+   var crossedUp=swingHigh&&previous<=swingHigh.price&&current>swingHigh.price;
+   var crossedDown=swingLow&&previous>=swingLow.price&&current<swingLow.price;
+   if(!crossedUp&&!crossedDown)continue;
+   var direction=crossedUp?"bullish":"bearish",level=crossedUp?swingHigh:swingLow;
+   var priorBias=trendAt(k),eventType=priorBias&&priorBias!==direction?"CHoCH":"BOS";
+   lastEvent={type:eventType,direction:direction,level:level.price,index:k,epoch:candles[k].epoch,brokenSwing:crossedUp?"high":"low"};
+   used[(crossedUp?"high:":"low:")+level.index]=true;
+  }
+  return {trend:trend,highState:highState,lowState:lowState,swingHighs:highs.slice(-2),swingLows:lows.slice(-2),support:lows.length?lows[lows.length-1].price:null,resistance:highs.length?highs[highs.length-1].price:null,lastEvent:lastEvent,confirmedSwingCount:{highs:highs.length,lows:lows.length},method:{left:left,right:right,tolerance:tolerance}};
  }
  return {analyze:analyze};
 });
