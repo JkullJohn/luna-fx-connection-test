@@ -56,8 +56,10 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
    <div class="metric"><div class="k">Price structure trend</div><strong id="trend">—</strong></div>
    <div class="metric"><div class="k">Swing structure</div><strong id="structure">—</strong></div>
    <div class="metric"><div class="k">50-candle low</div><strong id="support">—</strong></div>
-   <div class="metric"><div class="k">50-candle high</div><strong id="resistance">—</strong></div>
-  </div><p class="note" style="margin:10px 0 0">Trend is based on the two latest confirmed swing highs and lows (2 candles on each side). If the swing signals disagree or are incomplete, the dashboard reports Mixed/Building instead of forcing a direction. EMA bias is shown separately above.</p></section>
+   <div class="metric"><div class="k">Swing resistance</div><strong id="resistance">—</strong></div>
+   <div class="metric"><div class="k">Latest structure event</div><strong id="structureEvent">—</strong></div>
+   <div class="metric"><div class="k">Event level</div><strong id="eventLevel">—</strong></div>
+  </div><p class="note" id="structureNote" style="margin:10px 0 0">Confirmed swing points use two completed candles on each side. BOS marks a break in the current direction; CHoCH marks a break against the established structure. A close beyond a confirmed swing is required.</p></section>
   <section class="panel wide"><h2>Indicator interpretation</h2>
    <div class="level"><span class="k">EMA relationship</span><b id="emaSignal" class="neutral">Pending</b></div>
    <div class="level"><span class="k">RSI condition</span><b id="rsiSignal" class="neutral">Pending</b></div>
@@ -105,6 +107,7 @@ input{width:100%;min-width:0;background:var(--panel2);color:var(--text);border:1
 <p class="footer">LUNA FX is an informational charting prototype. Public API prices may differ from your Deriv MT5 account by feed, spread, timing, or server conditions. No login, password, API token, account access, deposits, or trade execution are used. Always verify prices and analysis independently.</p>
 </main>
 <script src="./indicators.js"></script>
+<script src="./market-structure.js"></script>
 <script>
 (function(){
 "use strict";
@@ -129,6 +132,7 @@ function updateClockDiagnostics(){
 }
 var ema=window.LunaIndicators.ema;
 var rsi=window.LunaIndicators.rsi;
+var analyzeStructure=window.LunaMarketStructure.analyze;
 function confirmedSwings(data){
  var highs=[],lows=[],left=2,right=2;
  for(var i=left;i<data.length-right;i++){
@@ -156,11 +160,11 @@ function renderTimeframe(granularity,candles){
  var cfg=tfFrames[granularity],closes=candles.map(function(c){return c.close});
  var fetchedAt=timeText(Date.now()/1000,"Africa/Lagos")+" WAT";
  if(!cfg||closes.length<50){if(cfg){$(cfg.id).textContent="Building";$(cfg.id+"meta").textContent=candles.length+" candles; 50 required for EMA 50 · updated "+fetchedAt}return}
- var e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14),a=closes[closes.length-1],v20=e20[e20.length-1],v50=e50[e50.length-1],r=rv[rv.length-1];
+ var e20=ema(closes,20),e50=ema(closes,50),rv=rsi(closes,14),a=closes[closes.length-1],v20=e20[e20.length-1],v50=e50[e50.length-1],r=rv[rv.length-1],structure=analyzeStructure(candles);
  var bias=v20>v50?"Bullish":v20<v50?"Bearish":"Neutral";
  $(cfg.id).textContent=bias;$(cfg.id).className=bias==="Bullish"?"bull":bias==="Bearish"?"bear":"neutral";
- $(cfg.id+"meta").textContent="Close "+fmt(a)+" · EMA20 "+fmt(v20)+" · EMA50 "+fmt(v50)+" · RSI "+(r===null?"—":r.toFixed(1))+" · "+candles.length+" candles · updated "+fetchedAt;
- tfResults[granularity]={bias:bias,rsi:r,close:a};
+ $(cfg.id+"meta").textContent="Close "+fmt(a)+" · EMA20 "+fmt(v20)+" · EMA50 "+fmt(v50)+" · RSI "+(r===null?"—":r.toFixed(1))+" · Structure "+structure.trend+" ("+structure.highState+" / "+structure.lowState+") · "+(structure.lastEvent?structure.lastEvent.type+" "+structure.lastEvent.direction+" @ "+fmt(structure.lastEvent.level):"No confirmed break")+" · "+candles.length+" candles · updated "+fetchedAt;
+ tfResults[granularity]={bias:bias,rsi:r,close:a,structure:structure};
  var ready=Object.keys(tfResults).length;
  if(ready===3){
   var bullish=[300,900,3600].filter(function(g){return tfResults[g].bias==="Bullish"}).length;
@@ -186,19 +190,15 @@ function draw(){
  $("rsiState").textContent=r===null?"Need more candles":r>=70?"Upper momentum zone":r<=30?"Lower momentum zone":"Middle range";
  $("rsiSignal").textContent=r===null?"Pending":r>=70?"Above 70":r<=30?"Below 30":"Between 30 and 70";
  $("rsiSignal").className=r===null?"neutral":r>=70?"bear":r<=30?"bull":"neutral";
- var n=Math.min(50,bars.length),recent=bars.slice(-n),lo=Math.min.apply(null,recent.map(function(b){return b.low})),hi=Math.max.apply(null,recent.map(function(b){return b.high}));
- $("support").textContent=fmt(lo);$("resistance").textContent=fmt(hi);
- $("trend").textContent=enoughEma?(v20>v50?"Upward":v20<v50?"Downward":"Sideways"):"Building";
- $("trend").className=enoughEma?(v20>v50?"bull":v20<v50?"bear":"neutral"):"neutral";
- var swings=confirmedSwings(bars),h=swings.highs,l=swings.lows,highState="—",lowState="—",trendText="Building";
- if(h.length>=2){var h1=h[h.length-2].price,h2=h[h.length-1].price;highState=h2>h1+0.00002?"Higher highs":h2<h1-0.00002?"Lower highs":"Equal highs"}
- if(l.length>=2){var l1=l[l.length-2].price,l2=l[l.length-1].price;lowState=l2>l1+0.00002?"Higher lows":l2<l1-0.00002?"Lower lows":"Equal lows"}
- if(highState==="Higher highs"&&lowState==="Higher lows")trendText="Upward";
- else if(highState==="Lower highs"&&lowState==="Lower lows")trendText="Downward";
- else if(h.length>=2&&l.length>=2)trendText="Mixed";
- $("trend").textContent=trendText;
- $("trend").className=trendText==="Upward"?"bull":trendText==="Downward"?"bear":"neutral";
- $("structure").textContent=(h.length>=2?highState:"Highs building")+" / "+(l.length>=2?lowState:"Lows building");
+ var market=analyzeStructure(bars);
+ $("support").textContent=market.support===null?"Building":fmt(market.support);
+ $("resistance").textContent=market.resistance===null?"Building":fmt(market.resistance);
+ $("trend").textContent=market.trend;
+ $("trend").className=market.trend==="Bullish"?"bull":market.trend==="Bearish"?"bear":"neutral";
+ $("structure").textContent=market.highState+" / "+market.lowState;
+ $("structureEvent").textContent=market.lastEvent?market.lastEvent.type+" · "+market.lastEvent.direction:"No break";
+ $("structureEvent").className=market.lastEvent?(market.lastEvent.direction==="bullish"?"bull":"bear"):"neutral";
+ $("eventLevel").textContent=market.lastEvent?fmt(market.lastEvent.level):"—";
  drawPrice(e20,e50);drawRsi(rv);
 }
 function setupCanvas(c){var rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;c.width=Math.max(1,Math.floor(rect.width*dpr));c.height=Math.max(1,Math.floor(rect.height*dpr));var x=c.getContext("2d");x.setTransform(dpr,0,0,dpr,0,0);return {ctx:x,w:rect.width,h:rect.height}}
