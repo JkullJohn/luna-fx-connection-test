@@ -6,7 +6,9 @@ A read-only EURUSD market-analysis dashboard using Deriv's public market-data fe
 
 - Live EURUSD public tick and recent candlestick history
 - EMA 20/50 and RSI 14 indicators
-- Short-term market structure and multi-timeframe context
+- Swing-confirmed support and resistance, higher highs/lows and lower highs/lows
+- Close-confirmed Break of Structure (BOS) and Change of Character (CHoCH)
+- Market-structure context across M1, M5, M15 and H1
 - Manual MT5 Bid/Ask snapshot comparison
 - Feed connection diagnostics
 
