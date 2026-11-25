@@ -33,7 +33,7 @@
    return "Equal";
   }
   function trendAt(index){
-   var h=highs.filter(function(p){return p.index<index}),l=lows.filter(function(p){return p.index<index});
+   var h=highs.filter(function(p){return p.index+right<index}),l=lows.filter(function(p){return p.index+right<index});
    var hs=classify(h,"Higher highs","Lower highs"),ls=classify(l,"Higher lows","Lower lows");
    return hs==="Higher highs"&&ls==="Higher lows"?"bullish":hs==="Lower highs"&&ls==="Lower lows"?"bearish":null;
   }
@@ -41,8 +41,8 @@
   var trend=highState==="Higher highs"&&lowState==="Higher lows"?"Bullish":highState==="Lower highs"&&lowState==="Lower lows"?"Bearish":highState==="Building"||lowState==="Building"?"Building":"Mixed";
   var lastEvent=null,used={};
   for(var k=1;k<candles.length;k++){
-   var availableHighs=highs.filter(function(p){return p.index<k&&!used["high:"+p.index]});
-   var availableLows=lows.filter(function(p){return p.index<k&&!used["low:"+p.index]});
+   var availableHighs=highs.filter(function(p){return p.index+right<k&&!used["high:"+p.index]});
+   var availableLows=lows.filter(function(p){return p.index+right<k&&!used["low:"+p.index]});
    var swingHigh=availableHighs[availableHighs.length-1],swingLow=availableLows[availableLows.length-1];
    var previous=candles[k-1].close,current=candles[k].close;
    var crossedUp=swingHigh&&previous<=swingHigh.price&&current>swingHigh.price;
