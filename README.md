@@ -12,6 +12,10 @@ A read-only EURUSD market-analysis dashboard using Deriv's public market-data fe
 - Manual MT5 Bid/Ask snapshot comparison
 - Feed connection diagnostics
 
+## Support and resistance interpretation
+
+Support and resistance zones are grouped from confirmed swing highs and lows in recent candles. The dashboard reports how many historical touches contribute to each zone and how far the zone is from the latest close. The strength label is descriptive of those historical touches; it is not a probability, forecast, or trade signal.
+
 ## Timestamp conventions
 
 Deriv tick timestamps are Unix epoch values and are treated as UTC. The dashboard displays each incoming tick in both:
